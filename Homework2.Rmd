@@ -12,9 +12,14 @@ output:
     toc_float: yes
 ---
 
+Download the .Rmd directly at the top-right.
+
+![](https://raw.githubusercontent.com/jrfarrer/stats701_hw2/master/viz/stat701_hw2.gif)
+
 Full repo: [https://github.com/jrfarrer/stats701_hw2/](https://github.com/jrfarrer/stats701_hw2/)
 
 Published file: [https://jrfarrer.github.io/stats701_hw2/](https://jrfarrer.github.io/stats701_hw2/)
+
 
 ```{r setup, include=FALSE}
 # Set options for the rmarkdown file
@@ -45,7 +50,7 @@ dir.create(code_dir, showWarnings = FALSE)
 dir.create(viz_dir, showWarnings = FALSE)
 ```
 
-```{r Load Packages}
+```{r Load Packages, include = FALSE}
 # Create a function that will be used to load/install packages
 fn_load_packages <- function(p) {
   if (!is.element(p, installed.packages()[,1]) || (p =="DT" && !(packageVersion(p) > "0.1"))) {
@@ -64,7 +69,7 @@ fn_load_packages <- function(p) {
 }
 # Create a vector of packages
 packages <- c('tidyverse','ggthemes','knitr','extrafont','broom','aod','leaps','bestglm',
-              'GGally','xtable','pander','descr','plotROC', 'ROCR','pROC', 'corrplot')
+              'GGally','pander','descr','plotROC', 'ROCR','pROC', 'corrplot')
 # Use function to load the required packages
 invisible(lapply(packages, fn_load_packages))
 ```
@@ -133,7 +138,7 @@ We load the `Framingham.dat` file and summarize the `r ncol(framingham_raw)` var
 head(framingham_cleaning)
 ```
 
-We then remove `r framingham_cleaning %>% filter(!complete.cases(.)) %>% count() %>% unlist()` that have missing values.
+We then remove `r framingham_cleaning %>% filter(!complete.cases(.)) %>% count() %>% unlist()` observations that have missing values.
 
 ```{r Check missing data in Fram}
 framingham_cleaning2 <- 
@@ -149,7 +154,7 @@ pander(summary(framingham_cleaning2), missing = "", split.table = Inf)
 framingham_final <- framingham_cleaning2
 ```
 
-To get a better idea of this dataset, we create a pairs plot colored by observations <span style="color:`r pal538['blue'][[1]]`">without heart disease (hd = 0)</span> and <span style="color:`r pal538['red'][[1]]`">with heart disease (hd = 1)</span>
+To get a better idea of this dataset, we create a pairs plot colored by observations <span style="color:`r pal538['blue'][[1]]`">without heart disease (hd = 0)</span> and <span style="color:`r pal538['red'][[1]]`">with heart disease (hd = 1)</span>.
 
 ```{r Pairs Plot for Exploration, fig.width = 7.5, fig.height = 7}
 fpairs <-ggpairs(framingham_final, mapping = aes(colour = hd))
@@ -173,9 +178,10 @@ pander(descr::CrossTable(framingham_final$hd, framingham_final$sex, prop.chisq=F
 
 We fit a logistic regression model to predict heart disease with only the explanatory variable systolic blood pressure (SBP).
 
-```{r}
+```{r results = 'asis'}
 fit1 <- glm(hd ~ sbp, data = framingham_final, family = binomial('logit'))
-summary(fit1)
+tidy(fit1) %>% pander(caption = paste0(as.character(summary(fit1)$call)[3],': ', as.character(summary(fit1)$call)[2]))
+glance(fit1) %>% pander()
 ```
 
 The next variable we choose will have the largest $|z|$ statistic or the smallest $p$ value. We create `r sum(!(names(framingham_final) %in% c("hd","sbp")))` models that are `hd ~ sbp + var` and extract the summary of each variable `var`. 
@@ -198,7 +204,9 @@ We see that **sex** will be the most important addition on top of sbp.
 
 ```{r results = 'asis'}
 fit2 <- glm(hd ~ sbp + sex, data = framingham_final, family = binomial('logit'))
-(fit2_summary <- summary(fit2)) %>% xtable()
+fit2_summary <- summary(fit2)
+tidy(fit2) %>% pander(caption = paste0(as.character(summary(fit2)$call)[3],': ', as.character(summary(fit2)$call)[2]))
+glance(fit2) %>% pander()
 ```
 
 ### Residual Deviance
@@ -213,8 +221,9 @@ We perform the **Wald Test** which tests whether the set of terms is significant
 confint.default(fit2) %>% pander()
 ```
 
-```{r}
-(wald_test <- wald.test(b = coef(fit2), Sigma = vcov(fit2), Terms = 1:3))
+```{r result = 'asis'}
+wald_test <- wald.test(b = coef(fit2), Sigma = vcov(fit2), Terms = 1:3)
+wald_test$result$chi2 %>% as_tibble() %>% pander(caption = "Wald Test")
 ```
 
 The Wald Test yields a $p$-value of `r wald_test$result$chi2[3]`. The Wald Test for just one variable is the same test performed by the function `summary`. Below are the results for the Wald Test for just the term `sex`. Note that the statistic is z-value squared ($`r coef(fit2_summary)[3, 3]`^2 = `r coef(fit2_summary)[3, 3]^2`$) and the $p$-values are the same.
@@ -225,11 +234,12 @@ wald_test <- wald.test(b = coef(fit2), Sigma = vcov(fit2), Terms = 3)
 
 Next we perform the Likelihood Test (Chi-squared).
 
-```{r}
-(chi_sq_fit2 <- anova(fit2, test = "Chisq"))
+```{r results = 'asis'}
+chi_sq_fit2 <- anova(fit2, test = "Chisq")
+tidy(chi_sq_fit2) %>% pander(missing = '', caption = 'Analysis of Deviance Table')
 ```
 
-The $p$-value for adding the variable sex is `r chi_sq_fit2`. The $p$-value is not the same as the Wald Test. The Wald Test and the Likelihood Test both hold for this new model.
+The $p$-value for adding the variable sex is `r chi_sq_fit2[[5]][3]`. The $p$-value is not the same as the Wald Test. The Wald Test and the Likelihood Test both hold for this new model.
 
 ## Modeling Building
 
@@ -242,7 +252,8 @@ fit7 <- glm(hd ~ sbp+sex+age+cig+chol+frw+dbp, data = framingham_final, family =
 fit6 <- glm(hd ~ sbp+sex+age+cig+chol+frw, data = framingham_final, family = binomial('logit'))
 fit5 <- glm(hd ~ sbp+sex+age+cig+chol, data = framingham_final, family = binomial('logit'))
 fit4 <- glm(hd ~ sbp+sex+age+chol, data = framingham_final, family = binomial('logit'))
-summary(fit4) %>% xtable()
+tidy(fit4) %>% pander(caption = paste0(as.character(summary(fit4)$call)[3],': ', as.character(summary(fit4)$call)[2]))
+glance(fit4) %>% pander()
 ```
 
 ### AIC Criterion
@@ -257,11 +268,12 @@ exhaustive_model <- bestglm(as.data.frame(Xy), family = binomial('logit'),
 exhaustive_model$BestModels
 ```
 
-This method is not guaranteed to include only variables with $p$-values less than 0.05. In this example, the best model includes frw which the summary shows is not significant at the 0.05 level. Thus, the best model returned by exhaustive search is not the same as the model returned by backwards elimination.
+This method is not guaranteed to include only variables with $p$-values less than 0.05. In this example, the best model includes frw which the glm summary shows is not significant at the 0.05 level. Thus, the best model returned by exhaustive search is not the same as the model returned by backwards elimination.
 
 ```{r results = 'asis'}
 final_model <- exhaustive_model$BestModel
-summary(final_model) %>% xtable()
+tidy(final_model) %>% pander(caption = "Best model returned by exhaustive search")
+glance(final_model) %>% pander()
 ```
 
 ### Final Model
@@ -325,7 +337,7 @@ fit1_classificer <-
 
 The ROC curve is used to assess the accuracy of a continuous variable for predicting a binary outcome. In the ROC above the continuous variable is systolic blood pressure (sbp) and the binary outcome is whether the individual will have heart disease (hd).
 
-```{r}
+```{r fig.align = TRUE}
 plot_df <- 
     data_frame(
         hd = framingham_final %>% mutate(hd = as.integer(hd) - 1) %>% select(hd) %>% unlist()
@@ -368,7 +380,7 @@ The ROC curve for fit2 always contains the ROC curve for fit1. The AUC of the RO
 
 ### Prediction Values
 
-```{r}
+```{r results = 'asis'}
 values_df <- 
     plot_df2 %>%
         mutate(pred = as.integer(fitted > .5)) %>%
@@ -383,7 +395,8 @@ values_df <-
         )
 
 values_df %>%
-    select(model, positive_prediction_value, negative_prediction_value)
+    select(model, positive_prediction_value, negative_prediction_value) %>%
+    pander()
 ```
 
 fit2 is more desireable if we care about Positive Prediction Value because the PPV is `r values_df$positive_prediction_value[2]` for fit2 vs `r values_df$positive_prediction_value[1]` for fit1.
@@ -448,8 +461,7 @@ ggplot(ppnp_vs_threshold_df, aes(x = threshold, y = ppnp, colour = as.factor(mod
 
 ```
 
-I would choose fit2, but fit1 and fit2 are nearly the same. I would want to you fit2 slightly have the 0.5 probability threshold.
-
+I would choose fit2, but fit1 and fit2 are nearly the same. I would want to ise fit2 with a probability threshold slightly above 0.5.
 
 ## Bayes Rule
 
@@ -544,11 +556,11 @@ ggplot(threshold_mce_df2, aes(x = threshold, y = mce, colour = as.factor(risk_ra
          x = "Posterior Threshold", y = "Weighted Misclassification Error (MCE)")
 ```
 
-The range of the x-axis is from 0.5 to 0.7 which reflects the range of the fitted values from final model for 1 b). We know that model has a range from `r min(final_model$fitted)` to `r max(final_model$fitted)` which when exponentiated and converted to a probability is `r round(exp(min(final_model$fitted)) / (1 + exp(min(final_model$fitted))), 2) - 0.01` to `r round(exp(max(final_model$fitted)) / (1 + exp(max(final_model$fitted))), 2)`.
+The range of the x-axis is from 0.5 to 0.7 which reflects the range of the fitted values from the final model for 1 b). We know from model the fitted values have a range from `r min(final_model$fitted)` to `r max(final_model$fitted)` which when exponentiated and converted to a probability is `r round(exp(min(final_model$fitted)) / (1 + exp(min(final_model$fitted))), 2) - 0.01` to `r round(exp(max(final_model$fitted)) / (1 + exp(max(final_model$fitted))), 2)`.
 
 When $\frac{a_{1,0}}{a_{0,1}} = 10$ the Bayes rule classifier does not perform well for large thresholds. When the threshold is 0.5, the rule is all observations are `hd = 1` which means that $a_{10} \sum_{\hat{y}_i=1} I\{y_i \neq \hat{y}_i\}$ goes to 0. The misclassification initially goes down, but then there is a huge penality for false negatives.
 
-The Bayes rule classifier with $\frac{a_{1,0}}{a_{0,1}} = 1$ performs much better and indeed the misclassification rate as the threshold increases.
+The Bayes rule classifier with $\frac{a_{1,0}}{a_{0,1}} = 1$ performs much better and indeed the misclassification rate decreases as the threshold increases.
 
 # Question 2
 
@@ -558,8 +570,7 @@ bills_test <- read.csv(paste0(data_dir, 'Bills.subset.test.csv'), row.names = 1)
 ```
 ## Executive Summary
 
-
-
+Our objective is to predict whether or not a bill will pass the the floor of the Pennsylvania State House based on characteristics of the bill. Some of the characteristics of bills that we use in this analysis is the number amendments the bill had, the session the bill was introduced, and the number of cosponsors. Using the process of training/test datasets and cross-validation, we built a logistic regression model for this prediction exercise. However, a bill passing the State House is a rare event. Less than 7% of introduced bills have passed the House since the 2009-2010 session. As a result, our final model is effective at identifying bills that will not pass, but is less effective at identifying bills that will pass.
 
 ## Summary of Data
 
@@ -589,11 +600,11 @@ We find that `r bills_train2 %>% filter(!complete.cases(.)) %>% nrow() %>% unlis
 ```{r Missing Data}
 bills_train2 %>%
     summarise_all(funs(sum(is.na(.)))) %>%
-    gather(feature, nas) %>%
-    arrange(desc(nas))
+    gather(feature, NAs) %>%
+    arrange(desc(NAs))
 ```
 
-There are `r sum(is.na(bills_train2$status))` values of status that are `NA`. Based on the assignments comment "All other outcomes are failures" we will assume these are failures to pass rather than missing values. We will remove the observation without day of week so that different models are comparable.
+There are `r sum(is.na(bills_train2$status))` values of status that are `NA`. Based on the assignment's comment that "All other outcomes are failures" we will assume these are failures to pass rather than missing values. We will remove the observations without day of week (from training and test datasets) so that different models are comparable.
 
 
 ```{r}
@@ -609,7 +620,7 @@ bills_test3 <-
 ```
 
 ```{r results = 'asis'}
-pander(summary(bills_train3), missing = "")
+pander(summary(bills_train3), missing = "", split.table = 150)
 ``` 
 
 To explore the data further we create a pairs plot.
@@ -638,8 +649,8 @@ bill_pairs2
 Based on the pairs plots we make the following observations
 
 1. A bill passing is a relatively rare event (`r sum(bills_train3$status2 == 1)` in `r nrow(bills_train3)` or `r round(100 * sum(bills_train3$status2 == 1) / nrow(bills_train3), 2)`%)
-2. Whether the bill's sponser in leadership does not have as a large of effect as expected
-3. The number of amendments variable looks to be relatively powerful (four column from the right above)
+2. Whether the bill's sponser is in leadership does not have as a large of effect as expected
+3. The number of amendments features looks to be relatively powerful (fourth column from the right above)
 
 Given the partisanship of the PA, we would imagine that a bill's successful is likely dependent on the party sponsor. We create a frequency table and Pearson's Chi-squared test.
 
@@ -649,26 +660,31 @@ pander(descr::CrossTable(bills_train3$status2, bills_train3$sponsor_party, prop.
 pander(chisq.test(bills_train3$status2, bills_train3$sponsor_party), caption = "Pearson's Chi-squared test with Yates' continuity correction")
 ```
 
-We also look at the relationship between number of amendments and whether the bills passed. We note if bills with at least one amendment had `r round(100 * bills_train3 %>% filter(num_amendments > 0) %>% summarise(pass_rate = sum(status2 == 1) / n()),2) %>% unlist()`% pass rate vs `r round(100 * bills_train3 %>% filter(num_amendments == 0) %>% summarise(pass_rate = sum(status2 == 1) / n()),2) %>% unlist()`% for bills without an amendment.
+We also look at the relationship between number of amendments and whether the bills passed. We note that bills with at least one amendment had `r round(100 * bills_train3 %>% filter(num_amendments > 0) %>% summarise(pass_rate = sum(status2 == 1) / n()),2) %>% unlist()`% pass rate vs `r round(100 * bills_train3 %>% filter(num_amendments == 0) %>% summarise(pass_rate = sum(status2 == 1) / n()),2) %>% unlist()`% for bills without an amendment.
 
 ```{r, results='asis'}
-pander(descr::CrossTable(bills_train3$num_amendments, bills_train3$status2, prop.chisq=FALSE, prop.t = FALSE, chisq = TRUE, prop.c = F, prop.r = F,dnn = c("Number of Amendments","Status")), split.table = Inf, big.mark = ',')
+bills_train3 %>%
+    group_by(num_amendments, status2) %>%
+    count() %>%
+    spread(status2, n) %>%
+    mutate(`Total` = as.integer(ifelse(is.na(`0`), 0 ,`0`)) + `1`) %>%
+    rename(`Amendments | Status` = num_amendments) %>%
+    pander(missing = '')
 ```
 
-```{r}
+```{r results = 'asis'}
 bills_train3 %>%
     mutate(amendments = ifelse(num_amendments == 0, "0 Amendments", "1+ Amendments")) %>%
     group_by(amendments) %>%
     summarise(pass_rate = sum(status2 == 1) / n()) %>%
     ungroup() %>%
-    spread(amendments, pass_rate)
+    spread(amendments, pass_rate) %>%
+    pander()
 ```
 
 The many continous explanatory variables are derviatives of another and we would expect to so see some colinearity among these variables. The correlation matrix belows shows that many variables are very closely positively correlated to each other.
 
 ```{r fig.width = 7.5}
-cex.before <- par("cex")
-par(cex = 0.1)
 bills_train3 %>% 
     select(num_cosponsors, num_d_cosponsors, num_r_cosponsors, title_word_count, num_amendments,
            num_originating_committee_cosponsors, num_originating_committee_cosponsors_r, 
@@ -676,10 +692,29 @@ bills_train3 %>%
     cor() %>%
     #corrplot(method="square", tl.cex = 1/par("cex"), tl.col = 'black', tl.pos = 'l')
     corrplot(type = "upper", tl.pos = "td", method = "square", tl.cex = 0.5, tl.col = 'black', diag = FALSE)
-par(cex = cex.before)
 ```
 
 ## Classifier
+
+### Feature Engineering
+
+We quickly notice that what is missing is a feature for the bipartisan support of a bill. In a state like Pennsylvania, whether or not a bill passes is likely a function of the bipartisanship of the bill. We can create an indicator feature as to whether or not a bill has both Democrat and Republican sponsors.
+
+```{r results = 'asis'}
+bills_train4 <- 
+    bills_train3 %>%
+    mutate(is_bipartisan = factor(ifelse(num_d_cosponsors > 0 & num_r_cosponsors > 0, 1, 0)))
+
+bills_test4 <- 
+    bills_test3 %>%
+    mutate(is_bipartisan = factor(ifelse(num_d_cosponsors > 0 & num_r_cosponsors > 0, 1, 0)))
+
+bipartisan_tbl <- table(bills_train4$status2, bills_train4$is_bipartisan)
+
+pander(descr::CrossTable(bills_train4$status2, bills_train4$is_bipartisan, prop.chisq=FALSE, prop.t = FALSE, chisq = TRUE, dnn = c("Status","Bipartisan")), split.table = Inf, big.mark = ',')
+```
+
+We see that of the bills that do pass, nearly `r round(100* bipartisan_tbl[2,2] / (bipartisan_tbl[2,2] + bipartisan_tbl[2,1]),2)`% of them have bipartisan support.
 
 ### Backwards Selection
 
@@ -688,32 +723,33 @@ We begin by building a model with all the predictors we think could affect the s
 We remove these and continue with backward selection until all the variables in the logistic regression model are significant at the 0.01 confidence level. Our initial model is shown below.
 
 ```{r results = 'asis'}
-bills_fit1 <- glm(status2 ~ session + dow + is_sponsor_in_leadership2 + sponsor_party +
+bills_fit1 <- glm(status2 ~ session + dow + is_sponsor_in_leadership2 + sponsor_party + is_bipartisan +
                       num_cosponsors + num_d_cosponsors + num_r_cosponsors + title_word_count + num_amendments +
                       num_originating_committee_cosponsors + num_originating_committee_cosponsors_r +
-                      num_originating_committee_cosponsors_d, data = bills_train3, family = binomial)
-bills_fit2 <- glm(status2 ~ session + dow + is_sponsor_in_leadership2 + sponsor_party +
+                      num_originating_committee_cosponsors_d, data = bills_train4, family = binomial)
+bills_fit2 <- glm(status2 ~ session + dow + is_sponsor_in_leadership2 + sponsor_party + is_bipartisan +
                       num_cosponsors + num_d_cosponsors + title_word_count + num_amendments +
                       num_originating_committee_cosponsors + num_originating_committee_cosponsors_r, 
-                      data = bills_train3, family = binomial)
-bills_fit3 <- glm(status2 ~ session + dow + is_sponsor_in_leadership2 + sponsor_party +
+                      data = bills_train4, family = binomial)
+bills_fit3 <- glm(status2 ~ session + dow + is_sponsor_in_leadership2 + sponsor_party + is_bipartisan +
                       num_cosponsors + title_word_count + num_amendments +
                       num_originating_committee_cosponsors + num_originating_committee_cosponsors_r, 
-                      data = bills_train3, family = binomial)
-bills_fit4 <- glm(status2 ~ session + dow + is_sponsor_in_leadership2 + sponsor_party +
+                      data = bills_train4, family = binomial)
+bills_fit4 <- glm(status2 ~ session + dow + is_sponsor_in_leadership2 + sponsor_party + is_bipartisan +
                       num_cosponsors + title_word_count + num_amendments +
-                      num_originating_committee_cosponsors, data = bills_train3, family = binomial)
+                      num_originating_committee_cosponsors, data = bills_train4, family = binomial)
 bills_fit5 <- glm(status2 ~ session + is_sponsor_in_leadership2 + sponsor_party +
-                      num_cosponsors + title_word_count + num_amendments +
-                      num_originating_committee_cosponsors, data = bills_train3, family = binomial)
+                      num_cosponsors + title_word_count + num_amendments + is_bipartisan +
+                      num_originating_committee_cosponsors, data = bills_train4, family = binomial)
 bills_fit6 <- glm(status2 ~ session + is_sponsor_in_leadership2 + sponsor_party +
-                      title_word_count + num_amendments +
-                      num_originating_committee_cosponsors, data = bills_train3, family = binomial)
-bills_fit7 <- glm(status2 ~ session + sponsor_party + title_word_count + num_amendments +
-                      num_originating_committee_cosponsors, data = bills_train3, family = binomial)
-bills_fit8 <- glm(status2 ~ session + sponsor_party + title_word_count + num_amendments, 
-                  data = bills_train3, family = binomial)
-xtable::xtable(bills_fit8)
+                      title_word_count + num_amendments + is_bipartisan +
+                      num_originating_committee_cosponsors, data = bills_train4, family = binomial)
+bills_fit7 <- glm(status2 ~ session + sponsor_party + title_word_count + num_amendments + is_bipartisan +
+                      num_originating_committee_cosponsors, data = bills_train4, family = binomial)
+bills_fit8 <- glm(status2 ~ session + sponsor_party + title_word_count + num_amendments + is_bipartisan, 
+                  data = bills_train4, family = binomial)
+tidy(bills_fit8) %>% pander(caption = paste0(as.character(summary(bills_fit8)$call)[3],': ', as.character(summary(bills_fit8)$call)[2]))
+glance(bills_fit8) %>% pander()
 ```
 
 ### Exhaustive Method
@@ -722,12 +758,12 @@ We use the package `glmulti` to select the best model based on AIC. We tried `be
 
 ```{r}
 best_glm_bills <- glmulti::glmulti(status2 ~ session + dow + is_sponsor_in_leadership2 + sponsor_party +
-                      num_cosponsors + title_word_count + num_amendments +
+                      num_cosponsors + title_word_count + num_amendments + is_bipartisan +
                       num_originating_committee_cosponsors, 
-                      data = bills_train3, family = binomial, crit = aic, level = 1, plotty = FALSE, report = FALSE)
+                      data = bills_train4, family = binomial, crit = aic, level = 1, plotty = FALSE, report = FALSE)
 ```
 
-`glmulit` returns a best model wiht the equations `r gsub('  ', '', paste0(summary(best_glm_bills)$bestmodel, collapse = ""))`.
+`glmulit` returns a best model with the equations ``r gsub('  ', '', paste0(summary(best_glm_bills)$bestmodel, collapse = ""))``.
 
 
 We find that the best model has an AIC of `r summary(best_glm_bills)$bestic` which is only slightly smaller than the AIC of the final model we found from backwards selection `r summary(bills_fit8)$aic`.
@@ -742,7 +778,7 @@ We plot the ROC curves for the 8 models we have created. The first 6 ROC curves 
 
 ```{r}
 bills_plot_roc_df <- 
-    bills_train3 %>%
+    bills_train4 %>%
     bind_cols(
         data_frame(
             backwards = bills_fit8$fitted
@@ -777,14 +813,14 @@ Let's review the AUC for the 8 curves.
 ```{r results = 'asis'}
 data_frame(
     model = c("other1","other2","other3","other4","other5", "other6","backwards","glmulti")
-    , AUC = c(auc(roc(bills_train3$status2, bills_fit1$fitted))[1]
-            , auc(roc(bills_train3$status2, bills_fit2$fitted))[1]
-            , auc(roc(bills_train3$status2, bills_fit3$fitted))[1]
-            , auc(roc(bills_train3$status2, bills_fit4$fitted))[1]
-            , auc(roc(bills_train3$status2, bills_fit5$fitted))[1]
-            , auc(roc(bills_train3$status2, bills_fit6$fitted))[1]
-            , auc(roc(bills_train3$status2, bills_fit8$fitted))[1]
-            , auc(roc(bills_train3$status2, bills_fit7$fitted))[1])
+    , AUC = c(auc(roc(bills_train4$status2, bills_fit1$fitted))[1]
+            , auc(roc(bills_train4$status2, bills_fit2$fitted))[1]
+            , auc(roc(bills_train4$status2, bills_fit3$fitted))[1]
+            , auc(roc(bills_train4$status2, bills_fit4$fitted))[1]
+            , auc(roc(bills_train4$status2, bills_fit5$fitted))[1]
+            , auc(roc(bills_train4$status2, bills_fit6$fitted))[1]
+            , auc(roc(bills_train4$status2, bills_fit8$fitted))[1]
+            , auc(roc(bills_train4$status2, bills_fit7$fitted))[1])
     
 ) %>% 
 pander()
@@ -794,11 +830,11 @@ pander()
 
 We perform $K$-fold cross validation on the training dataset with $K = 10$ for two models we have focused in on: backwards and glmulti.
 
-```{r}
+```{r results = 'asis'}
 data_frame(
     model = c('backwards','glmulti')
-    , `CV estimate of Prediction Rrror` = c(boot::cv.glm(bills_train3, bills_fit8, K = 10)$delta[[1]],
-                                            boot::cv.glm(bills_train3, bills_fit7, K = 10)$delta[[1]])
+    , `CV estimate of Prediction Rrror` = c(boot::cv.glm(bills_train4, bills_fit8, K = 10)$delta[[1]],
+                                            boot::cv.glm(bills_train4, bills_fit7, K = 10)$delta[[1]])
 ) %>% 
 pander()
 ```
@@ -807,11 +843,11 @@ We see these are incredibly similar models and would be satisified with either m
 
 ### Bayes Rule
 
-We propose a loss function such that  $\frac{a_{1,0}}{a_{0,1}} = 5$ in order to minimize false negatives. A bill passing in a very rare event (unfortunately) so we want to maximize the negative predictive value (incidence of false negatives). We see no difference in weighted MCE.
+We propose a loss function such that  $\frac{a_{1,0}}{a_{0,1}} = 5$ in order to minimize false negatives. A bill passing is a very rare event (unfortunately) so we want to maximize the negative predictive value (incidence of false negatives). We see no difference in weighted MCE.
     
 ```{r results = 'asis'}
 data_frame(
-    status = bills_train3$status2
+    status = bills_train4$status2
     , fitted_back = bills_fit8$fitted.values
     , fitted_glmulit = bills_fit8$fitted.values
     , pred_back = as.integer(fitted_back > 0.2 / (1 + 0.2))
@@ -833,12 +869,12 @@ pander()
 The confusion table for the backwards selection model is below.
 
 ```{r, results='asis'}
-confusion_bills <- table(bills_train3$status2, ifelse(predict(bills_fit8, type = 'response') > .5, 1, 0))
+confusion_bills <- table(bills_train4$status2, ifelse(predict(bills_fit8, type = 'response') > .5, 1, 0))
 
-pander(descr::CrossTable(bills_train3$status2, ifelse(predict(bills_fit8, type = 'response') > .5, 1, 0), prop.chisq=FALSE, prop.r = F, prop.c = F, prop.t = TRUE, chisq = TRUE, dnn = c("Status","Prediction")), split.table = Inf, big.mark = ',')
+pander(descr::CrossTable(bills_train4$status2, ifelse(predict(bills_fit8, type = 'response') > .5, 1, 0), prop.chisq=FALSE, prop.r = F, prop.c = F, prop.t = TRUE, chisq = TRUE, dnn = c("Status","Prediction")), split.table = Inf, big.mark = ',')
 ```
 
-We see that while this model goes a good job at predicting when a bill will not pass ($Specificity = \frac{TN}{TN + FP} = `r confusion_bills[1,1] / (confusion_bills[1,1] + confusion_bills[1,2])`$), it doesn't have the positive predictive value we'd hope ($\frac{TP}{TP + FP} = `r confusion_bills[2,2] / (confusion_bills[2,2] + confusion_bills[2,1])`$).
+We see that while this model goes a good job at predicting when a bill will not pass (specificity $= \frac{TN}{TN + FP} = `r confusion_bills[1,1] / (confusion_bills[1,1] + confusion_bills[1,2])`$), it doesn't have the positive predictive value we'd hope ($\frac{TP}{TP + FP} = `r confusion_bills[2,2] / (confusion_bills[2,2] + confusion_bills[2,1])`$).
     
 ### Final Model
 
@@ -851,14 +887,14 @@ tidy_bills_fit8 <-
     tidy(bills_fit8) %>%
     mutate(term = gsub("_","\\\\,", term))
 
-bills_test_pred <- ifelse(predict(bills_fit8, bills_test3, type = "response") > 0.5, 1, 0)
+bills_test_pred <- ifelse(predict(bills_fit8, bills_test4, type = "response") > 0.5, 1, 0)
 
-confusion_test_bills <- table(bills_test3$status2, bills_test_pred)
+confusion_test_bills <- table(bills_test4$status2, bills_test_pred)
 
-pander(descr::CrossTable(bills_test3$status2, bills_test_pred, prop.chisq=FALSE, prop.r = F, prop.c = F, prop.t = TRUE, chisq = TRUE, dnn = c("Status","Prediction")), split.table = Inf, big.mark = ',')
+pander(descr::CrossTable(bills_test4$status2, bills_test_pred, prop.chisq=FALSE, prop.r = F, prop.c = F, prop.t = TRUE, chisq = TRUE, dnn = c("Status","Prediction")), split.table = Inf, big.mark = ',')
 ```
 
-We see that the unweighted MCE is `r (confusion_test_bills[1,2] + confusion_test_bills[2,1]) / sum(confusion_test_bills)`. However, what we see is that again the model is good at predicting when a bill will not pass but has difficulty properly predicting a true positive ($ positive prediction value = \frac{TP}{TP + FP} = `r confusion_test_bills[2,2] / (confusion_test_bills[2,2] + confusion_test_bills[2,1])`$)
+We see that the unweighted MCE is `r (confusion_test_bills[1,2] + confusion_test_bills[2,1]) / sum(confusion_test_bills)`. However, what we see is that again the model is good at predicting when a bill will not pass but has difficulty properly predicting a true positive (positive prediction value $= \frac{TP}{TP + FP} = `r confusion_test_bills[2,2] / (confusion_test_bills[2,2] + confusion_test_bills[2,1])`$)
 
 The final model is 
 
@@ -867,7 +903,8 @@ $$\hat{y}_i = `r tidy_bills_fit8[1, 2]` +
 `r tidy_bills_fit8[3, 2]``r tidy_bills_fit8[3, 1]` +
 `r tidy_bills_fit8[4, 2]``r tidy_bills_fit8[4, 1]` + \\
 `r tidy_bills_fit8[5, 2]``r tidy_bills_fit8[5, 1]` +
-`r tidy_bills_fit8[6, 2]``r tidy_bills_fit8[6, 1]`$$
+`r tidy_bills_fit8[6, 2]``r tidy_bills_fit8[6, 1]` +
+`r tidy_bills_fit8[7, 2]``r tidy_bills_fit8[7, 1]`$$
 
 ```{r}
 summary_vars_bills <- 
@@ -888,15 +925,20 @@ summary_vars_bills %>% select(-percentage)
 
 Holding all other variables constant,
 
++ An increase by **one amendment to the bill**, we expect to see about `r summary_vars_bills %>% filter(variable == "num_amendments") %>% select(percentage) %>% unlist()` increase in the probability of a bill passing.
++ The difference of a bill being **sponsored by a Republican vs a Democrat**, we expect to see about `r summary_vars_bills %>% filter(variable == "sponsor_partyRepublican") %>% select(percentage) %>% unlist()` increase in the probability of a bill passing.
++ The difference of a bill being **bipartisan vs non-bipartisan**, we expect to see about `r summary_vars_bills %>% filter(variable == "is_bipartisan1") %>% select(percentage) %>% unlist()` increase in the probability of a bill passing.
++ A one word increase in **the number of words in the bill's title**, we expect to see about `r summary_vars_bills %>% filter(variable == "title_word_count") %>% select(percentage) %>% unlist()` increase in the probability of a bill passing.
 + The difference of being in **session 2011-2012 vs 2009-2010**, we expect to see about `r summary_vars_bills %>% filter(variable == "session2011-2012") %>% select(percentage) %>% unlist()` increase in the probability of a bill passing.
 + The difference of being in **session 2013-2014 vs 2009-2010**, we expect to see about `r summary_vars_bills %>% filter(variable == "session2013-2014") %>% select(percentage) %>% unlist()` increase in the probability of a bill passing.
-+ The difference of a bill being **sponsored by a Republican vs a Democrat**, we expect to see about `r summary_vars_bills %>% filter(variable == "sponsor_partyRepublican") %>% select(percentage) %>% unlist()` increase in the probability of a bill passing.
-+ A one word increase in **the number of words in the bill's title**, we expect to see about `r summary_vars_bills %>% filter(variable == "title_word_count") %>% select(percentage) %>% unlist()` increase in the probability of a bill passing.
-+ An increase by **one amendment to the bill**, we expect to see about `r summary_vars_bills %>% filter(variable == "num_amendments") %>% select(percentage) %>% unlist()` increase in the probability of a bill passing.
 
 ## Suggestions
 
+In considering how to better improve this model, we would want to consider gathering
 
++ How long was/has the bill been debated on the floor of the house (in days)
++ The number of outside lobbying groups involved in the authorship of the bill
++ The number of words in the bill
++ Some type of classification of the bill (i.e. tax reform, education spending, healthcare, public works, etc)
 
-
-
+We think that these features could potentially help improve the classifier. However, we also recognize that a different family of classifier might be helpful for this type of problem, particularly CART.
