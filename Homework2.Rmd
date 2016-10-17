@@ -221,7 +221,7 @@ We perform the **Wald Test** which tests whether the set of terms is significant
 confint.default(fit2) %>% pander()
 ```
 
-```{r result = 'asis'}
+```{r results = 'asis'}
 wald_test <- wald.test(b = coef(fit2), Sigma = vcov(fit2), Terms = 1:3)
 wald_test$result$chi2 %>% as_tibble() %>% pander(caption = "Wald Test")
 ```
