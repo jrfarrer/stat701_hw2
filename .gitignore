@@ -34,5 +34,6 @@ vignettes/*.pdf
 
 .DS_Store
 .Rproj.user
-data/*csv
+
+*.csv
 
